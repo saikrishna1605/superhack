@@ -1,0 +1,79 @@
+# Dependabot configuration for automated dependency updates
+
+version: 2
+updates:
+  # Python dependencies for API service
+  - package-ecosystem: "pip"
+    directory: "/services/api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "your-team"
+    labels:
+      - "dependencies"
+      - "api"
+    commit-message:
+      prefix: "api"
+      include: "scope"
+    ignore:
+      # Ignore major version updates for stable dependencies
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Python dependencies for ML service
+  - package-ecosystem: "pip"
+    directory: "/services/ml"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "your-team"
+    labels:
+      - "dependencies"
+      - "ml"
+    commit-message:
+      prefix: "ml"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # npm dependencies for UI
+  - package-ecosystem: "npm"
+    directory: "/services/ui"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "your-team"
+    labels:
+      - "dependencies"
+      - "ui"
+    commit-message:
+      prefix: "ui"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci-cd"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

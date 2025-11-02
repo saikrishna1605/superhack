@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'PulseOps AI - Serverless MSP and IT optimization platform'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+    Description: Environment name (dev or prod)
+  
+  DBUsername:
+    Type: String
+    Default: pulseops_admin
+    Description: Database master username
+    NoEcho: true
+  
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Database master password (min 8 characters)
+  
+  SecretKey:
+    Type: String
+    NoEcho: true
+    Description: JWT secret key for authentication
+    Default: change-this-in-production-to-secure-random-string
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.11
+    MemorySize: 512
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        DB_HOST: !GetAtt PulseOpsDatabase.Endpoint.Address
+        DB_PORT: '5432'
+        DB_NAME: pulseops
+        DB_USER: !Ref DBUsername
+        DB_PASSWORD: !Ref DBPassword
+        SECRET_KEY: !Ref SecretKey
+        AWS_REGION: !Ref AWS::Region
+        S3_BUCKET: !Ref DataBucket
+        DYNAMODB_TABLE: !Ref MetricsTable
+    Tracing: Active
+    Layers:
+      - !Ref DependenciesLayer
+
+Resources:
+  # S3 Bucket for UI
+  UIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pulseops-ui-${Environment}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+
+  # CloudFront Distribution
+  UIDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !GetAtt UIBucket.DomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        Enabled: true
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # CachingOptimized
+
+  # RDS PostgreSQL Database
+  PulseOpsDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub 'pulseops-${Environment}'
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      EngineVersion: '15.4'
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBName: pulseops
+      AllocatedStorage: 20
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref DatabaseSecurityGroup
+      PubliclyAccessible: true
+      DeletionProtection: false
+
+  # Security Group for Database
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for PulseOps database
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+
+  # API Gateway
+  PulseOpsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+
+  # Lambda Functions
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'pulseops-api-${Environment}'
+      CodeUri: services/api/
+      Handler: main.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PulseOpsApi
+            Path: /{proxy+}
+            Method: ANY
+
+  MLFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'pulseops-ml-${Environment}'
+      CodeUri: services/ml/
+      Handler: main.handler
+      Timeout: 300
+      MemorySize: 1024
+
+  # DynamoDB for real-time data
+  MetricsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'pulseops-metrics-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: client_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: client_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+
+  # S3 Bucket for ML models and data
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pulseops-data-${Environment}'
+
+Outputs:
+  ApiUrl:
+    Description: 'API Gateway endpoint URL'
+    Value: !Sub 'https://${PulseOpsApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  
+  UIUrl:
+    Description: 'CloudFront distribution URL'
+    Value: !GetAtt UIDistribution.DomainName
+  
+  DatabaseEndpoint:
+    Description: 'RDS database endpoint'
+    Value: !GetAtt PulseOpsDatabase.Endpoint.Address

@@ -1,0 +1,30 @@
+# Automatically label PRs based on changed files
+
+api:
+  - services/api/**/*
+
+ml:
+  - services/ml/**/*
+
+ui:
+  - services/ui/**/*
+
+infrastructure:
+  - infrastructure/**/*
+
+documentation:
+  - '**/*.md'
+  - docs/**/*
+
+dependencies:
+  - '**/requirements.txt'
+  - '**/package.json'
+  - '**/package-lock.json'
+
+tests:
+  - '**/*test*.py'
+  - '**/*test*.js'
+  - '**/__tests__/**/*'
+
+ci-cd:
+  - .github/**/*

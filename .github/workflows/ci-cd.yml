@@ -1,0 +1,439 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+env:
+  AWS_REGION: us-east-1
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # Run tests on pull requests and pushes
+  test-api:
+    name: Test API Service
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ./services/api
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio httpx
+      
+      - name: Run linting
+        working-directory: ./services/api
+        run: |
+          pip install flake8
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      - name: Run tests
+        working-directory: ./services/api
+        run: |
+          pytest --cov=. --cov-report=xml --cov-report=term
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./services/api/coverage.xml
+          flags: api
+          name: api-coverage
+
+  test-ml:
+    name: Test ML Service
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ./services/ml
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+      
+      - name: Run tests
+        working-directory: ./services/ml
+        run: |
+          pytest --cov=. --cov-report=xml --cov-report=term
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./services/ml/coverage.xml
+          flags: ml
+          name: ml-coverage
+
+  test-ui:
+    name: Test UI Service
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ./services/ui/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./services/ui
+        run: npm ci
+      
+      - name: Run linting
+        working-directory: ./services/ui
+        run: npm run lint || true
+      
+      - name: Run tests
+        working-directory: ./services/ui
+        run: npm test -- --coverage --watchAll=false
+      
+      - name: Build UI
+        working-directory: ./services/ui
+        run: npm run build
+
+  # Security scanning
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Deploy to development on push to develop branch
+  deploy-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: [test-api, test-ml, test-ui]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: development
+      url: ${{ steps.deploy.outputs.ui_url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Set up SAM CLI
+        uses: aws-actions/setup-sam@v2
+      
+      - name: Build API Lambda
+        working-directory: ./services/api
+        run: |
+          pip install -r requirements.txt -t package
+      
+      - name: Build ML Lambda
+        working-directory: ./services/ml
+        run: |
+          pip install -r requirements.txt -t package
+      
+      - name: Build UI
+        working-directory: ./services/ui
+        run: |
+          npm ci
+          npm run build
+      
+      - name: SAM Build
+        working-directory: ./infrastructure
+        run: sam build --template-file sam-template.yaml
+      
+      - name: SAM Deploy
+        id: deploy
+        working-directory: ./infrastructure
+        run: |
+          sam deploy \
+            --stack-name pulseops-dev \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --parameter-overrides \
+              Environment=dev \
+              DBUsername=${{ secrets.DEV_DB_USERNAME }} \
+              DBPassword=${{ secrets.DEV_DB_PASSWORD }} \
+              JWTSecretKey=${{ secrets.DEV_JWT_SECRET }} \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+          
+          # Get stack outputs
+          UI_URL=$(aws cloudformation describe-stacks \
+            --stack-name pulseops-dev \
+            --query 'Stacks[0].Outputs[?OutputKey==`UIUrl`].OutputValue' \
+            --output text)
+          echo "ui_url=$UI_URL" >> $GITHUB_OUTPUT
+          
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name pulseops-dev \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+            --output text)
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+          
+          UI_BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name pulseops-dev \
+            --query 'Stacks[0].Outputs[?OutputKey==`UIBucketName`].OutputValue' \
+            --output text)
+          echo "ui_bucket=$UI_BUCKET" >> $GITHUB_OUTPUT
+      
+      - name: Deploy UI to S3
+        run: |
+          aws s3 sync ./services/ui/build s3://${{ steps.deploy.outputs.ui_bucket }} --delete
+      
+      - name: Invalidate CloudFront cache
+        run: |
+          DIST_ID=$(aws cloudformation describe-stacks \
+            --stack-name pulseops-dev \
+            --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' \
+            --output text)
+          if [ ! -z "$DIST_ID" ]; then
+            aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
+          fi
+      
+      - name: Test deployment
+        run: |
+          pip install requests
+          python infrastructure/test_deployment.py \
+            --api-url ${{ steps.deploy.outputs.api_url }} \
+            --ml-url ${{ steps.deploy.outputs.api_url }} \
+            --ui-url ${{ steps.deploy.outputs.ui_url }}
+      
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🚀 Deployment Complete\n\n**Environment:** Development\n**UI URL:** ${{ steps.deploy.outputs.ui_url }}\n**API URL:** ${{ steps.deploy.outputs.api_url }}`
+            })
+
+  # Deploy to production on push to main branch (with approval)
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test-api, test-ml, test-ui, security-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.ui_url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Set up SAM CLI
+        uses: aws-actions/setup-sam@v2
+      
+      - name: Build API Lambda
+        working-directory: ./services/api
+        run: |
+          pip install -r requirements.txt -t package
+      
+      - name: Build ML Lambda
+        working-directory: ./services/ml
+        run: |
+          pip install -r requirements.txt -t package
+      
+      - name: Build UI
+        working-directory: ./services/ui
+        run: |
+          npm ci
+          npm run build
+      
+      - name: SAM Build
+        working-directory: ./infrastructure
+        run: sam build --template-file sam-template.yaml
+      
+      - name: SAM Deploy
+        id: deploy
+        working-directory: ./infrastructure
+        run: |
+          sam deploy \
+            --stack-name pulseops-prod \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --parameter-overrides \
+              Environment=prod \
+              DBUsername=${{ secrets.PROD_DB_USERNAME }} \
+              DBPassword=${{ secrets.PROD_DB_PASSWORD }} \
+              JWTSecretKey=${{ secrets.PROD_JWT_SECRET }} \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+          
+          # Get stack outputs
+          UI_URL=$(aws cloudformation describe-stacks \
+            --stack-name pulseops-prod \
+            --query 'Stacks[0].Outputs[?OutputKey==`UIUrl`].OutputValue' \
+            --output text)
+          echo "ui_url=$UI_URL" >> $GITHUB_OUTPUT
+          
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name pulseops-prod \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+            --output text)
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+          
+          UI_BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name pulseops-prod \
+            --query 'Stacks[0].Outputs[?OutputKey==`UIBucketName`].OutputValue' \
+            --output text)
+          echo "ui_bucket=$UI_BUCKET" >> $GITHUB_OUTPUT
+      
+      - name: Deploy UI to S3
+        run: |
+          aws s3 sync ./services/ui/build s3://${{ steps.deploy.outputs.ui_bucket }} --delete
+      
+      - name: Invalidate CloudFront cache
+        run: |
+          DIST_ID=$(aws cloudformation describe-stacks \
+            --stack-name pulseops-prod \
+            --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDistributionId`].OutputValue' \
+            --output text)
+          if [ ! -z "$DIST_ID" ]; then
+            aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
+          fi
+      
+      - name: Test deployment
+        run: |
+          pip install requests
+          python infrastructure/test_deployment.py \
+            --api-url ${{ steps.deploy.outputs.api_url }} \
+            --ml-url ${{ steps.deploy.outputs.api_url }} \
+            --ui-url ${{ steps.deploy.outputs.ui_url }}
+      
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          body: |
+            ## PulseOps AI Production Release
+            
+            **Deployed:** ${{ github.event.head_commit.timestamp }}
+            **Commit:** ${{ github.sha }}
+            **Author:** ${{ github.event.head_commit.author.name }}
+            
+            ### Changes
+            ${{ github.event.head_commit.message }}
+            
+            ### URLs
+            - UI: ${{ steps.deploy.outputs.ui_url }}
+            - API: ${{ steps.deploy.outputs.api_url }}
+          draft: false
+          prerelease: false
+
+  # Manual deployment workflow
+  deploy-manual:
+    name: Manual Deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Deploy
+        working-directory: ./infrastructure
+        run: |
+          python deploy.py --environment ${{ github.event.inputs.environment }} --region ${{ env.AWS_REGION }}

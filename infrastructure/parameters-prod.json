@@ -1,0 +1,11 @@
+{
+  "Parameters": {
+    "Environment": "prod",
+    "DBUsername": "pulseops_admin",
+    "DBPassword": "CHANGE_THIS_IN_PRODUCTION",
+    "JWTSecretKey": "CHANGE_THIS_IN_PRODUCTION",
+    "DBInstanceClass": "db.t3.small",
+    "DBAllocatedStorage": "100",
+    "EnableMultiAZ": "true"
+  }
+}

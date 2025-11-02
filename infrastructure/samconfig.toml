@@ -1,0 +1,19 @@
+[default]
+stack_name = "pulseops-dev"
+resolve_s3 = true
+s3_prefix = "pulseops"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+parameter_overrides = "Environment=dev DBUsername=pulseops_admin DBPassword=CHANGE_ME JWTSecretKey=CHANGE_ME"
+image_repositories = []
+
+[prod]
+stack_name = "pulseops-prod"
+resolve_s3 = true
+s3_prefix = "pulseops"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+parameter_overrides = "Environment=prod DBUsername=pulseops_admin DBPassword=CHANGE_ME JWTSecretKey=CHANGE_ME"
+image_repositories = []

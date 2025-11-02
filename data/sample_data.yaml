@@ -1,0 +1,82 @@
+# Sample client data for MSP dashboard
+clients:
+  - id: "client_001"
+    name: "TechCorp Solutions"
+    industry: "Technology"
+    contract_value: 15000
+    monthly_spend: 2500
+    licenses: 45
+    users: 120
+    health_score: 85
+    churn_risk: "low"
+    last_support_ticket: "2024-10-15"
+    
+  - id: "client_002"
+    name: "MedLife Healthcare"
+    industry: "Healthcare"
+    contract_value: 25000
+    monthly_spend: 4200
+    licenses: 78
+    users: 200
+    health_score: 72
+    churn_risk: "medium"
+    last_support_ticket: "2024-10-28"
+    
+  - id: "client_003"
+    name: "EduPrime Academy"
+    industry: "Education"
+    contract_value: 8000
+    monthly_spend: 1200
+    licenses: 25
+    users: 80
+    health_score: 92
+    churn_risk: "low"
+    last_support_ticket: "2024-09-20"
+
+# Sample software usage data for IT teams
+software_usage:
+  - software: "Microsoft 365"
+    total_licenses: 500
+    active_users: 380
+    utilization: 76
+    monthly_cost: 7500
+    department: "All"
+    
+  - software: "Slack Premium"
+    total_licenses: 200
+    active_users: 145
+    utilization: 72.5
+    monthly_cost: 1600
+    department: "Engineering"
+    
+  - software: "Adobe Creative Suite"
+    total_licenses: 50
+    active_users: 25
+    utilization: 50
+    monthly_cost: 2500
+    department: "Marketing"
+    
+  - software: "Salesforce"
+    total_licenses: 75
+    active_users: 68
+    utilization: 90.7
+    monthly_cost: 5625
+    department: "Sales"
+
+# Anomaly detection patterns
+cost_anomalies:
+  - date: "2024-10-25"
+    software: "AWS Services"
+    expected_cost: 2500
+    actual_cost: 4200
+    variance: 68
+    severity: "high"
+    cause: "Unexpected EC2 instance scaling"
+    
+  - date: "2024-10-20"
+    software: "Zoom Pro"
+    expected_cost: 800
+    actual_cost: 1200
+    variance: 50
+    severity: "medium"
+    cause: "Additional webinar licenses purchased"

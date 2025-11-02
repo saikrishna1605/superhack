@@ -1,0 +1,232 @@
+name: Scheduled Tasks
+
+on:
+  schedule:
+    # Run dependency updates check weekly on Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+    # Run security scan daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  # Check for dependency updates
+  dependency-updates:
+    name: Check Dependency Updates
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Check Python outdated packages
+        run: |
+          cd services/api
+          pip install -r requirements.txt
+          pip list --outdated > outdated-api.txt || true
+          
+          cd ../ml
+          pip install -r requirements.txt
+          pip list --outdated > outdated-ml.txt || true
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Check npm outdated packages
+        working-directory: ./services/ui
+        run: |
+          npm ci
+          npm outdated > outdated-ui.txt || true
+      
+      - name: Create issue for updates
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let body = '## 📦 Weekly Dependency Update Report\n\n';
+            body += `Generated on: ${new Date().toISOString()}\n\n`;
+            
+            try {
+              const apiOutdated = fs.readFileSync('services/api/outdated-api.txt', 'utf8');
+              body += '### API Service\n```\n' + apiOutdated + '\n```\n\n';
+            } catch (e) {}
+            
+            try {
+              const mlOutdated = fs.readFileSync('services/ml/outdated-ml.txt', 'utf8');
+              body += '### ML Service\n```\n' + mlOutdated + '\n```\n\n';
+            } catch (e) {}
+            
+            try {
+              const uiOutdated = fs.readFileSync('services/ui/outdated-ui.txt', 'utf8');
+              body += '### UI Service\n```\n' + uiOutdated + '\n```\n\n';
+            } catch (e) {}
+            
+            body += '### Recommended Actions\n';
+            body += '1. Review the outdated packages\n';
+            body += '2. Update dependencies in a separate branch\n';
+            body += '3. Run tests to ensure compatibility\n';
+            body += '4. Create a PR with the updates\n';
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Automated] Dependency Updates - ${new Date().toISOString().split('T')[0]}`,
+              body: body,
+              labels: ['dependencies', 'automated']
+            });
+
+  # Daily security scan
+  security-audit:
+    name: Daily Security Audit
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Run pip-audit
+        run: |
+          pip install pip-audit
+          
+          cd services/api
+          pip-audit -r requirements.txt --format json > ../../api-audit.json || true
+          
+          cd ../ml
+          pip-audit -r requirements.txt --format json > ../../ml-audit.json || true
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Run npm audit
+        working-directory: ./services/ui
+        run: |
+          npm audit --json > ../ui-audit.json || true
+      
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-results
+          path: |
+            api-audit.json
+            ml-audit.json
+            ui-audit.json
+          retention-days: 30
+      
+      - name: Create security issue if vulnerabilities found
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let hasVulnerabilities = false;
+            let body = '## 🔒 Daily Security Audit Report\n\n';
+            body += `Generated on: ${new Date().toISOString()}\n\n`;
+            
+            // Check API audit
+            try {
+              const apiAudit = JSON.parse(fs.readFileSync('api-audit.json', 'utf8'));
+              if (apiAudit.vulnerabilities && apiAudit.vulnerabilities.length > 0) {
+                hasVulnerabilities = true;
+                body += `### ⚠️ API Service: ${apiAudit.vulnerabilities.length} vulnerabilities found\n\n`;
+              }
+            } catch (e) {}
+            
+            // Check ML audit
+            try {
+              const mlAudit = JSON.parse(fs.readFileSync('ml-audit.json', 'utf8'));
+              if (mlAudit.vulnerabilities && mlAudit.vulnerabilities.length > 0) {
+                hasVulnerabilities = true;
+                body += `### ⚠️ ML Service: ${mlAudit.vulnerabilities.length} vulnerabilities found\n\n`;
+              }
+            } catch (e) {}
+            
+            // Check UI audit
+            try {
+              const uiAudit = JSON.parse(fs.readFileSync('ui-audit.json', 'utf8'));
+              if (uiAudit.vulnerabilities && Object.keys(uiAudit.vulnerabilities).length > 0) {
+                hasVulnerabilities = true;
+                body += `### ⚠️ UI Service: vulnerabilities found\n\n`;
+              }
+            } catch (e) {}
+            
+            if (hasVulnerabilities) {
+              body += '### Action Required\n';
+              body += '1. Review the audit results in the workflow artifacts\n';
+              body += '2. Update vulnerable dependencies\n';
+              body += '3. Test the application\n';
+              body += '4. Deploy the fixes\n';
+              
+              github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `[SECURITY] Vulnerabilities Detected - ${new Date().toISOString().split('T')[0]}`,
+                body: body,
+                labels: ['security', 'high-priority', 'automated']
+              });
+            }
+
+  # Cleanup old deployments
+  cleanup-old-deployments:
+    name: Cleanup Old Deployments
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Cleanup old Lambda versions
+        run: |
+          # Keep only last 5 versions of each Lambda function
+          for function in pulseops-dev-ApiFunction pulseops-dev-MLFunction; do
+            versions=$(aws lambda list-versions-by-function --function-name $function --query 'Versions[?Version!=`$LATEST`].Version' --output text)
+            version_count=$(echo $versions | wc -w)
+            
+            if [ $version_count -gt 5 ]; then
+              old_versions=$(echo $versions | awk '{for(i=1;i<=NF-5;i++) print $i}')
+              for version in $old_versions; do
+                echo "Deleting Lambda version: $function:$version"
+                aws lambda delete-function --function-name $function:$version || true
+              done
+            fi
+          done
+      
+      - name: Cleanup old CloudWatch logs
+        run: |
+          # Delete log streams older than 90 days
+          retention_days=90
+          cutoff_time=$(($(date +%s) * 1000 - retention_days * 86400 * 1000))
+          
+          for log_group in /aws/lambda/pulseops-dev-ApiFunction /aws/lambda/pulseops-dev-MLFunction; do
+            echo "Cleaning up log group: $log_group"
+            
+            streams=$(aws logs describe-log-streams \
+              --log-group-name $log_group \
+              --query "logStreams[?creationTime<\`$cutoff_time\`].logStreamName" \
+              --output text)
+            
+            for stream in $streams; do
+              echo "Deleting log stream: $stream"
+              aws logs delete-log-stream --log-group-name $log_group --log-stream-name $stream || true
+            done
+          done

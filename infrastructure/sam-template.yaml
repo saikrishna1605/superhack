@@ -1,0 +1,530 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'PulseOps AI - Complete Serverless Infrastructure'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment
+  
+  DBUsername:
+    Type: String
+    Default: pulseops_admin
+    Description: RDS master username
+    NoEcho: true
+  
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: RDS master password
+  
+  JWTSecretKey:
+    Type: String
+    NoEcho: true
+    Description: JWT secret for authentication
+    Default: CHANGE-THIS-SECRET-KEY-IN-PRODUCTION
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.11
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        DB_HOST: !GetAtt PulseOpsDatabase.Endpoint.Address
+        DB_PORT: '5432'
+        DB_NAME: pulseops
+        DB_USER: !Ref DBUsername
+        DB_PASSWORD: !Ref DBPassword
+        SECRET_KEY: !Ref JWTSecretKey
+        AWS_REGION: !Ref AWS::Region
+        S3_BUCKET: !Ref DataBucket
+        DYNAMODB_TABLE: !Ref MetricsTable
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'"
+      AllowOrigin: "'*'"
+
+Resources:
+  # ============== VPC Configuration ==============
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-vpc-${Environment}'
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-public-subnet-1-${Environment}'
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-public-subnet-2-${Environment}'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-igw-${Environment}'
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-public-rt-${Environment}'
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  SubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # ============== Security Groups ==============
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for RDS PostgreSQL
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-db-sg-${Environment}'
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda functions
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-lambda-sg-${Environment}'
+
+  # ============== RDS PostgreSQL ==============
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for PulseOps RDS
+      SubnetIds:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-db-subnet-group-${Environment}'
+
+  PulseOpsDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub 'pulseops-${Environment}'
+      DBInstanceClass: !If [IsProd, db.t3.small, db.t3.micro]
+      Engine: postgres
+      EngineVersion: '15.4'
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBName: pulseops
+      AllocatedStorage: !If [IsProd, 100, 20]
+      StorageType: gp3
+      StorageEncrypted: true
+      VPCSecurityGroups:
+        - !Ref DatabaseSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      PubliclyAccessible: !If [IsProd, false, true]
+      BackupRetentionPeriod: !If [IsProd, 7, 1]
+      MultiAZ: !If [IsProd, true, false]
+      DeletionProtection: !If [IsProd, true, false]
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-db-${Environment}'
+
+  # ============== S3 Buckets ==============
+  UIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pulseops-ui-${Environment}-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ['*']
+            AllowedMethods: [GET, HEAD]
+            AllowedHeaders: ['*']
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-ui-${Environment}'
+
+  UIBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UIBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${UIBucket.Arn}/*'
+
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pulseops-data-${Environment}-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-data-${Environment}'
+
+  # ============== CloudFront ==============
+  CloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub 'OAI for PulseOps UI ${Environment}'
+
+  UIDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'PulseOps UI Distribution - ${Environment}'
+        DefaultRootObject: index.html
+        Origins:
+          - DomainName: !GetAtt UIBucket.RegionalDomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD, OPTIONS]
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          MinTTL: 0
+          DefaultTTL: 86400
+          MaxTTL: 31536000
+        CustomErrorResponses:
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        PriceClass: PriceClass_100
+
+  # ============== DynamoDB ==============
+  MetricsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'pulseops-metrics-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: client_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+        - AttributeName: metric_type
+          AttributeType: S
+      KeySchema:
+        - AttributeName: client_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: MetricTypeIndex
+          KeySchema:
+            - AttributeName: metric_type
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        Enabled: true
+        AttributeName: ttl
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      Tags:
+        - Key: Name
+          Value: !Sub 'pulseops-metrics-${Environment}'
+
+  # ============== IAM Roles ==============
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'pulseops-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'
+        - 'arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess'
+      Policies:
+        - PolicyName: LambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:*'
+                Resource:
+                  - !GetAtt MetricsTable.Arn
+                  - !Sub '${MetricsTable.Arn}/index/*'
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:DeleteObject'
+                Resource:
+                  - !Sub '${DataBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt DataBucket.Arn
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+
+  # ============== API Gateway ==============
+  PulseOpsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub 'pulseops-api-${Environment}'
+      StageName: !Ref Environment
+      TracingEnabled: true
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: NONE
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          title: !Sub 'PulseOps API - ${Environment}'
+          version: '1.0'
+        paths:
+          /{proxy+}:
+            x-amazon-apigateway-any-method:
+              produces:
+                - application/json
+              responses: {}
+              x-amazon-apigateway-integration:
+                uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiFunction.Arn}/invocations'
+                httpMethod: POST
+                type: aws_proxy
+
+  # ============== Lambda Functions ==============
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'pulseops-api-${Environment}'
+      CodeUri: ../services/api/
+      Handler: main.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        ApiProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PulseOpsApi
+            Path: /{proxy+}
+            Method: ANY
+      Tags:
+        Name: !Sub 'pulseops-api-${Environment}'
+
+  MLFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'pulseops-ml-${Environment}'
+      CodeUri: ../services/ml/
+      Handler: main.handler
+      Timeout: 300
+      MemorySize: 1024
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Tags:
+        Name: !Sub 'pulseops-ml-${Environment}'
+
+  # ============== CloudWatch Logs ==============
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/pulseops-api-${Environment}'
+      RetentionInDays: !If [IsProd, 30, 7]
+
+  MLLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/pulseops-ml-${Environment}'
+      RetentionInDays: !If [IsProd, 30, 7]
+
+  # ============== CloudWatch Alarms ==============
+  ApiErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'pulseops-api-errors-${Environment}'
+      AlarmDescription: Alert on API function errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ApiFunction
+
+  DatabaseConnectionAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'pulseops-db-connections-${Environment}'
+      AlarmDescription: Alert on high database connections
+      MetricName: DatabaseConnections
+      Namespace: AWS/RDS
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref PulseOpsDatabase
+
+# ============== Conditions ==============
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+
+# ============== Outputs ==============
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${PulseOpsApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrl'
+  
+  UIUrl:
+    Description: CloudFront distribution URL for UI
+    Value: !GetAtt UIDistribution.DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-UIUrl'
+  
+  UIBucketName:
+    Description: S3 bucket for UI hosting
+    Value: !Ref UIBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-UIBucket'
+  
+  DatabaseEndpoint:
+    Description: RDS database endpoint
+    Value: !GetAtt PulseOpsDatabase.Endpoint.Address
+    Export:
+      Name: !Sub '${AWS::StackName}-DatabaseEndpoint'
+  
+  DatabasePort:
+    Description: RDS database port
+    Value: !GetAtt PulseOpsDatabase.Endpoint.Port
+    Export:
+      Name: !Sub '${AWS::StackName}-DatabasePort'
+  
+  DataBucketName:
+    Description: S3 bucket for data storage
+    Value: !Ref DataBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-DataBucket'
+  
+  MetricsTableName:
+    Description: DynamoDB table for metrics
+    Value: !Ref MetricsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-MetricsTable'
+  
+  ApiLogGroup:
+    Description: CloudWatch log group for API
+    Value: !Ref ApiLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiLogGroup'
+  
+  MLLogGroup:
+    Description: CloudWatch log group for ML
+    Value: !Ref MLLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-MLLogGroup'
