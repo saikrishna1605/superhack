@@ -39,10 +39,20 @@ cd services/api && pip install -r requirements.txt
 cd ../ml && pip install -r requirements.txt
 cd ../ui && npm install
 
-# Start services
-cd services/api && uvicorn main:app --reload
-cd services/ml && python -m flask run
-cd services/ui && npm start
+# Start Backend API Server
+cd services/api
+python main.py
+# The API server will start on http://localhost:8000
+
+# Open a new terminal and start the UI Server
+cd services/ui
+npm install    # Only needed first time or when dependencies change
+npm start
+# The UI will automatically open in your default browser at http://localhost:3000
+
+# Default Login Credentials
+# MSP Dashboard: username: admin, password: admin
+# IT Dashboard: username: it_user, password: password
 ```
 
 ### AWS Deployment
