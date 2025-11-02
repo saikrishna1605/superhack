@@ -1,102 +1,100 @@
-# CI/CD Setup Complete! 🎉
+# PulseOps AI - Hackathon Project
 
-## What's Been Created
+A sophisticated AI-powered platform designed to help Managed Service Providers (MSPs) optimize their operations and enable IT teams to better manage their software resources.
 
-### GitHub Actions Workflows
+## Project Overview
 
-1. **`.github/workflows/ci-cd.yml`** - Main CI/CD Pipeline
-   - ✅ Automated testing for all services
-   - ✅ Security scanning with Trivy
-   - ✅ Auto-deployment to dev on `develop` branch
-   - ✅ Production deployment on `main` branch (with approval)
-   - ✅ Manual deployment option
+PulseOps AI is a comprehensive solution that combines:
+- 🤖 Advanced ML algorithms for predictive analytics
+- 📊 Real-time monitoring and alerting
+- 💼 Client management and profitability tracking
+- 🔑 Software license optimization
 
-2. **`.github/workflows/pr-checks.yml`** - Pull Request Checks
-   - ✅ Code quality checks (flake8, black, ESLint)
-   - ✅ Dependency vulnerability scanning
-   - ✅ Secrets scanning with TruffleHog
-   - ✅ Infrastructure validation
-   - ✅ PR size analysis
-   - ✅ Automatic PR labeling
+## Key Features
 
-3. **`.github/workflows/scheduled-tasks.yml`** - Maintenance Tasks
-   - ✅ Weekly dependency update checks
-   - ✅ Daily security audits
-   - ✅ Automated cleanup of old deployments
+### For MSPs
+- 📈 Real-time client health monitoring
+- ⚠️ Proactive churn prediction
+- 💰 Revenue optimization suggestions
+- 🎯 Targeted upsell recommendations
 
-### Configuration Files
+### For IT Teams
+- 📱 Software license usage tracking
+- 💳 Budget optimization
+- 🔍 Anomaly detection
+- 🤖 Automated license management
 
-- **`.github/dependabot.yml`** - Automated dependency updates
-- **`.github/labeler.yml`** - Auto-label PRs by file changes
+## Technical Architecture
 
-### Templates
+- **Frontend**: React.js with modern UI components
+- **Backend**: FastAPI for high-performance API
+- **ML Services**: Python-based ML models
+- **Database**: PostgreSQL for relational data
 
-- **`.github/PULL_REQUEST_TEMPLATE.md`** - Standardized PR template
-- **`.github/ISSUE_TEMPLATE/bug_report.yml`** - Bug report template
-- **`.github/ISSUE_TEMPLATE/feature_request.yml`** - Feature request template
-- **`.github/ISSUE_TEMPLATE/security_vulnerability.yml`** - Security report template
+## Quick Start Guide
 
-### Test Suites
+### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- PostgreSQL database
 
-**API Tests** (`services/api/tests/`):
-- ✅ conftest.py - Test fixtures and configuration
-- ✅ test_auth.py - Authentication endpoint tests
-- ✅ test_msp.py - MSP endpoint tests
+### Local Development Setup
 
-**ML Tests** (`services/ml/tests/`):
-- ✅ conftest.py - Test fixtures
-- ✅ test_churn_predictor.py - Churn prediction tests
-- ✅ test_anomaly_detector.py - Anomaly detection tests
-
-**UI Tests** (`services/ui/src/tests/`):
-- ✅ App.test.js - App component tests
-- ✅ formatters.test.js - Utility function tests
-
-### Documentation
-
-- **`.github/CI_CD_GUIDE.md`** - Complete CI/CD documentation
-
-## Quick Setup
-
-### 1. Configure GitHub Secrets
-
-Go to **Settings → Secrets and variables → Actions** and add:
-
-```
-AWS_ACCESS_KEY_ID=<your-aws-key>
-AWS_SECRET_ACCESS_KEY=<your-aws-secret>
-
-DEV_DB_USERNAME=pulseops_admin
-DEV_DB_PASSWORD=<secure-password>
-DEV_JWT_SECRET=<random-secret-key>
-
-PROD_DB_USERNAME=pulseops_admin
-PROD_DB_PASSWORD=<different-secure-password>
-PROD_JWT_SECRET=<different-random-secret-key>
-```
-
-### 2. Create GitHub Environments
-
-Go to **Settings → Environments** and create:
-
-**development**
-- No protection rules (auto-deploy)
-
-**production**
-- ✅ Required reviewers (1-2 people)
-- ✅ Deployment branches: `main` only
-
-### 3. Enable Workflows
-
-1. Go to **Actions** tab
-2. Enable workflows if prompted
-3. Review and approve workflow permissions
-
-### 4. Test the Pipeline
-
+1. **Clone the Repository**
 ```bash
-# Create a feature branch
-git checkout -b feature/test-ci-cd
+git clone https://github.com/simisgithome/SuperOps-hackathon.git
+cd SuperOps-hackathon
+```
+
+2. **Start Backend API Server**
+```bash
+cd services/api
+python main.py
+# The API server will start on http://localhost:8000
+```
+
+3. **Start Frontend UI Server**
+```bash
+cd services/ui
+npm install    # Only needed first time or when dependencies change
+npm start
+# The UI will automatically open in your default browser at http://localhost:3000
+```
+
+### Login Credentials
+
+#### MSP Dashboard
+- Username: admin
+- Password: admin
+
+#### IT Dashboard
+- Username: it_user
+- Password: password
+
+## Project Structure
+
+```
+services/
+├── api/           # Backend FastAPI service
+├── ml/            # Machine Learning services
+└── ui/            # React frontend application
+```
+
+## API Documentation
+
+- API documentation is available at `http://localhost:8000/docs` when the backend server is running
+- Swagger UI provides interactive API testing interface
+
+## Contributing
+
+1. Create a feature branch (`git checkout -b feature/amazing-feature`)
+2. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+3. Push to the branch (`git push origin feature/amazing-feature`)
+4. Open a Pull Request
+
+## License
+
+This project is part of the SuperOps Hackathon and is subject to the hackathon's terms and conditions.
 
 # Make a small change
 echo "# Testing CI/CD" >> TEST.md
