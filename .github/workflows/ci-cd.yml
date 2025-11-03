@@ -177,7 +177,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Check AWS credentials exist
+        id: check-creds
+        run: |
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "::error::AWS credentials not configured in GitHub Secrets"
+            echo "::error::Please add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to repository secrets"
+            echo "::error::Go to: Settings → Secrets and variables → Actions → New repository secret"
+            echo "::error::See .github/CI_CD_GUIDE.md for setup instructions"
+            exit 1
+          fi
+          echo "AWS credentials found"
+      
       - name: Configure AWS credentials
+        if: steps.check-creds.outcome == 'success'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -300,7 +313,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Check AWS credentials exist
+        id: check-creds
+        run: |
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "::error::AWS credentials not configured in GitHub Secrets"
+            echo "::error::Please add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to repository secrets"
+            echo "::error::Go to: Settings → Secrets and variables → Actions → New repository secret"
+            echo "::error::See .github/CI_CD_GUIDE.md for setup instructions"
+            exit 1
+          fi
+          echo "AWS credentials found"
+      
       - name: Configure AWS credentials
+        if: steps.check-creds.outcome == 'success'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -432,7 +458,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Check AWS credentials exist
+        id: check-creds
+        run: |
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "::error::AWS credentials not configured in GitHub Secrets"
+            echo "::error::Please add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to repository secrets"
+            echo "::error::Go to: Settings → Secrets and variables → Actions → New repository secret"
+            echo "::error::See .github/CI_CD_GUIDE.md for setup instructions"
+            exit 1
+          fi
+          echo "AWS credentials found"
+      
       - name: Configure AWS credentials
+        if: steps.check-creds.outcome == 'success'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
