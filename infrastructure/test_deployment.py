@@ -65,11 +65,11 @@ class DeploymentTester:
         print("\n🔐 Testing Authentication...")
         
         try:
-            # Test login
+            # Test login (using correct API prefix)
             response = requests.post(
-                f"{self.api_url}/auth/login",
+                f"{self.api_url}/api/auth/login",
                 data={
-                    "username": "msp@pulseops.com",
+                    "email": "msp@pulseops.com",
                     "password": "msp123"
                 },
                 timeout=10
@@ -100,9 +100,9 @@ class DeploymentTester:
         headers = {"Authorization": f"Bearer {self.token}"}
         
         endpoints = [
-            ("/msp/dashboard", "MSP dashboard"),
-            ("/msp/clients", "Client list"),
-            ("/analytics/revenue", "Revenue analytics"),
+            ("/api/msp/dashboard", "MSP dashboard"),
+            ("/api/msp/clients", "Client list"),
+            ("/api/analytics/revenue", "Revenue analytics"),
         ]
         
         all_passed = True

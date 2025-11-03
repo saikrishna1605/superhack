@@ -72,13 +72,17 @@ class AWSDeployer:
         print("\n📦 Building API service...")
         
         api_dir = self.project_root / 'services' / 'api'
+        package_dir = api_dir / 'package'
         
         try:
+            # Create package directory if it doesn't exist
+            package_dir.mkdir(parents=True, exist_ok=True)
+            
             # Install dependencies
             subprocess.run([
                 sys.executable, '-m', 'pip', 'install',
                 '-r', str(api_dir / 'requirements.txt'),
-                '-t', str(api_dir / 'package')
+                '-t', str(package_dir)
             ], check=True)
             
             print("  ✅ API service built successfully")
@@ -92,13 +96,17 @@ class AWSDeployer:
         print("\n🤖 Building ML service...")
         
         ml_dir = self.project_root / 'services' / 'ml'
+        package_dir = ml_dir / 'package'
         
         try:
+            # Create package directory if it doesn't exist
+            package_dir.mkdir(parents=True, exist_ok=True)
+            
             # Install dependencies
             subprocess.run([
                 sys.executable, '-m', 'pip', 'install',
                 '-r', str(ml_dir / 'requirements.txt'),
-                '-t', str(ml_dir / 'package')
+                '-t', str(package_dir)
             ], check=True)
             
             print("  ✅ ML service built successfully")
