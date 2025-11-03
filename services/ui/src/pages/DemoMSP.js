@@ -18,7 +18,8 @@ import {
   FormControl,
   Select,
   MenuItem,
-  InputLabel
+  InputLabel,
+  Tooltip
 } from '@mui/material';
 import {
   LineChart,
@@ -507,9 +508,9 @@ const DemoMSP = () => {
                       }}
                     >
                       <TableCell>
-                        <MuiTooltip title={alert.alert_type ? alert.alert_type.toUpperCase() : 'ALERT'}>
-                          {alert.icon}
-                        </MuiTooltip>
+                        <Tooltip title={alert.alert_type ? alert.alert_type.toUpperCase() : 'ALERT'}>
+                          <Box>{alert.icon}</Box>
+                        </Tooltip>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -559,7 +560,7 @@ const DemoMSP = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <MuiTooltip title={alert.details} arrow placement="left">
+                        <Tooltip title={alert.details} arrow placement="left">
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             <Typography 
                               variant="body2" 
@@ -575,7 +576,7 @@ const DemoMSP = () => {
                               ℹ️
                             </Typography>
                           </Box>
-                        </MuiTooltip>
+                        </Tooltip>
                       </TableCell>
                     </TableRow>
                   ))}

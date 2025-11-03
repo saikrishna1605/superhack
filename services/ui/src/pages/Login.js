@@ -55,11 +55,9 @@ const Login = ({ onLogin }) => {
     if (userType === 'msp') {
       setEmail('demo-msp@example.com');
       setPassword('password123');
-      setRole('msp');
     } else {
       setEmail('demo-it@example.com');
       setPassword('password123');
-      setRole('it_admin');
     }
   };
 
