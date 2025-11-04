@@ -48,8 +48,8 @@ REACT_APP_API_URL=http://localhost:8000
 ```
 
 ### Demo Credentials
-- **MSP User**: msp@pulseops.com / password123
-- **IT Admin**: it@pulseops.com / password123
+- **MSP User**: demo-msp@example.com / password123
+- **IT Admin**: demo-it@example.com / password123
 
 ## Project Structure
 

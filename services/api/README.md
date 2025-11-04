@@ -74,8 +74,8 @@ Once running, visit:
 ## Test Credentials
 
 After running `seed_data.py`:
-- **MSP User**: msp@pulseops.com / password123
-- **IT Admin**: it@pulseops.com / password123
+- **MSP User**: demo-msp@example.com / password123
+- **IT Admin**: demo-it@example.com / password123
 
 ## AWS Lambda Deployment
 

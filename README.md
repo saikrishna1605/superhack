@@ -2,6 +2,10 @@
 
 An autonomous AI agent designed to help Managed Service Providers (MSPs) grow profitably while enabling IT teams to optimize budget and software usage.
 
+## Demo
+
+Watch our platform demo: [PulseOps AI Demo Video](https://www.youtube.com/watch?v=5Xavog_UJqs&feature=youtu.be)
+
 ## Features
 
 ### For MSPs:
@@ -26,34 +30,33 @@ An autonomous AI agent designed to help Managed Service Providers (MSPs) grow pr
 
 ## Quick Start
 
+> For detailed setup instructions, see our [Quick Start Guide](QUICK_START.md)
+
 ### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- AWS CLI v2
-- AWS SAM CLI v1.x
+- Python 3.8+
+- Node.js 14+
 
-### Local Development
+### Start Application
 ```bash
-# Install dependencies
-cd services/api && pip install -r requirements.txt
-cd ../ml && pip install -r requirements.txt
-cd ../ui && npm install
-
-# Start Backend API Server
+# Backend (new terminal)
 cd services/api
-python main.py
-# The API server will start on http://localhost:8000
+python -m venv venv && source venv/bin/activate  # or .\venv\Scripts\activate on Windows
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 
-# Open a new terminal and start the UI Server
+# Frontend (new terminal)
 cd services/ui
-npm install    # Only needed first time or when dependencies change
+npm install
 npm start
-# The UI will automatically open in your default browser at http://localhost:3000
-
-# Default Login Credentials
-# MSP Dashboard: username: admin, password: admin
-# IT Dashboard: username: it_user, password: password
 ```
+
+### Demo Credentials
+- MSP Dashboard: `demo-msp@example.com` / `password123`
+- IT Dashboard: `demo-it@example.com` / `password123`
+
+Access the application:
+- UI Dashboard: http://localhost:3000
+- API Documentation: http://localhost:8000/docs
 
 ### AWS Deployment
 
@@ -185,7 +188,3 @@ pulseops/
 6. ✅ CI/CD Pipeline
 
 **Ready for production deployment!** 🚀
-
-## License
-
-MIT
