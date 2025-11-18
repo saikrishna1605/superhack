@@ -1,7 +1,7 @@
 # FastAPI for AWS Lambda
 fastapi==0.104.1
 mangum==0.17.0  # ASGI adapter for Lambda
-uvicorn==0.24.0
+uvicorn==0.38.0
 
 # Database
 sqlalchemy==2.0.23
