@@ -1,28 +1,5 @@
 {
-  "version": 2,
-  "buildCommand": "cd services/ui && npm install && npm run build",
+  "buildCommand": "cd services/ui && npm run build",
   "outputDirectory": "services/ui/build",
-  "builds": [
-    {
-      "src": "services/api/main.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "50mb"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "services/api/main.py"
-    },
-    {
-      "src": "/health",
-      "dest": "services/api/main.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ]
+  "installCommand": "cd services/ui && npm install"
 }
