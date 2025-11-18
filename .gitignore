@@ -53,3 +53,5 @@ build/
 # Local development
 *.sqlite
 *.db
+# Local Netlify folder
+.netlify
