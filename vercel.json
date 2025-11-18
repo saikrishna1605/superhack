@@ -5,7 +5,10 @@
   "builds": [
     {
       "src": "services/api/main.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb"
+      }
     }
   ],
   "routes": [
@@ -14,12 +17,8 @@
       "dest": "services/api/main.py"
     },
     {
-      "src": "/static/(.*)",
-      "dest": "/static/$1"
-    },
-    {
-      "src": "/(.*\\..+)",
-      "dest": "/$1"
+      "src": "/health",
+      "dest": "services/api/main.py"
     },
     {
       "src": "/(.*)",
