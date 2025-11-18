@@ -1,13 +1,8 @@
 {
   "version": 2,
+  "buildCommand": "cd services/ui && npm install && npm run build",
+  "outputDirectory": "services/ui/build",
   "builds": [
-    {
-      "src": "services/ui/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "services/ui/build"
-      }
-    },
     {
       "src": "services/api/main.py",
       "use": "@vercel/python"
@@ -20,19 +15,15 @@
     },
     {
       "src": "/static/(.*)",
-      "dest": "services/ui/build/static/$1"
+      "dest": "/static/$1"
     },
     {
-      "src": "/favicon.ico",
-      "dest": "services/ui/build/favicon.ico"
-    },
-    {
-      "src": "/manifest.json",
-      "dest": "services/ui/build/manifest.json"
+      "src": "/(.*\\..+)",
+      "dest": "/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "services/ui/build/index.html"
+      "dest": "/index.html"
     }
   ]
 }
